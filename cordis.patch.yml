@@ -1,0 +1,13 @@
+# dsh-edit-diff bundle patch: mount the edit/write diff-card plugin.
+#
+# Applied when this bundle appears in a profile's dsh.profile.bundles list.
+# The node half (package root) is a no-op Cordis plugin; the browser half
+# (dsh.client) is discovered automatically through the package's
+# dsh.client declaration + exports["./client"]. It registers two keyed
+# `tool.call.toolview` occupants (`edit`, `write`) that replace the shipped
+# DiffBlock render, eliminating same-line duplication with a near-linear
+# line diff + intra-line character highlight.
+
+- insert:
+    - id: dsh-edit-diff
+      name: dsh-edit-diff

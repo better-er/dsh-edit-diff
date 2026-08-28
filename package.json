@@ -1,0 +1,31 @@
+{
+  "name": "dsh-edit-diff",
+  "version": "0.1.0",
+  "description": "质量 diff 展示：接管 edit/write 工具卡片，用近线性行级 diff + 行内字符高亮，消除相同内容在删除/新增两区的重复（标准可安装 dsh 客户端插件）",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-slots"
+      ]
+    }
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "cordis.patch.yml",
+    "docs/"
+  ],
+  "license": "MIT"
+}
