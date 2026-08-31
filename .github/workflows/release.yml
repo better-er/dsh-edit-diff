@@ -68,9 +68,9 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          # registry-url 告知 npm 向哪个 registry 换 Trusted Publishing 临时凭证。
+          # 纯 JS 零依赖插件，无 lock 文件，故不启用 cache: npm；
+          # 否则 setup-node 会因找不到 package-lock.json 而直接失败。
           node-version: 24
-          cache: npm
           registry-url: https://registry.npmjs.org
 
       # 纯 JS 零依赖插件，无需 npm install；直接对两个产物源做 ESM 语法校验。
