@@ -62,7 +62,6 @@ dsh plugin --profile web remove dsh-edit-diff
 - **UI 挂载点**：接管 keyed 槽位 `tool.call.toolview` 的 `edit` 与 `write` 两个 key。
 - **遮蔽而非冲突**：注册时显式传 `priority: -1`（低于内置 `file-mutation-toolview` 的默认 0），用更低优先级遮蔽默认渲染，而不是在同一优先级上 clash。
 - **无构建**：`lib/client.js` 是按 DSH client bundle 产出的注册式模块，源码即产物，改完即用。
-- **硬性约束**：`lib/client.js` 的 `factory` 必须以 `return module.exports` 结尾，否则模块导出为 `undefined`，DSH 启动即 fail-loud。
 - 纯 JavaScript 单文件，不引入任何额外 npm 依赖（diff 算法就地内联）。
 
 ## License
