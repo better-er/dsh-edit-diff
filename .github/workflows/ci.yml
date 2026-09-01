@@ -1,7 +1,7 @@
 name: CI
 
 # 每次 push 到主分支、以及任何 PR 包括来自 fork 的 PR 都自动跑完整检查。
-# 本插件是纯 JS（无 TypeScript 源码、无构建步骤），lib/*.js 即发布产物。
+# 本插件是纯 JS，无 TypeScript 源码、无构建步骤，lib/*.js 即发布产物。
 # 因此 CI 检查 = 语法检查 + 产物齐全校验，全绿才允许合并。
 on:
   push:
