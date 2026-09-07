@@ -1,6 +1,6 @@
 {
   "name": "dsh-edit-diff",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "质量 diff：接管 edit/write 工具卡片，行级去重与行内高亮，消除相同内容在删除与新增两区的重复；兼容 PTC 模式，标准可安装的 dsh 客户端插件",
   "keywords": [
     "deepseek-harness",
