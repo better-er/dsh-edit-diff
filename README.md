@@ -31,6 +31,14 @@
 | 原版 diff | ![原版离谱显示](docs/原版diff.webp) |
 | 本插件 | ![插件优化显示](docs/优化diff.webp) |
 
+## 演示视频
+
+光看静态截图不过瘾？看看这个插件的实际演示效果：
+
+| dsh-edit-diff 插件演示 · 66 秒 |
+| :---: |
+| [![dsh-edit-diff 插件演示](https://i2.hdslb.com/bfs/archive/dd90d9de85da22eae537d53dd77a2034bf841b5e.jpg)](https://www.bilibili.com/video/BV1ect76CENM/) |
+
 ## 安装
 
 ```powershell
