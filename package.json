@@ -1,6 +1,6 @@
 {
   "name": "dsh-edit-diff",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "质量 diff：接管 edit/write 工具卡片，行级去重与行内高亮，消除相同内容在删除与新增两区的重复；兼容 PTC 模式，标准可安装的 dsh 客户端插件",
   "keywords": [
     "deepseek-harness",
@@ -14,11 +14,18 @@
     "type": "git",
     "url": "git+https://github.com/better-er/dsh-edit-diff.git"
   },
+  "packageManager": "pnpm@9.15.9",
   "type": "module",
   "main": "lib/index.js",
+  "types": "lib/index.d.ts",
   "exports": {
-    ".": "./lib/index.js",
-    "./client": "./lib/client.js",
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },
@@ -35,9 +42,21 @@
   },
   "files": [
     "lib/index.js",
+    "lib/index.d.ts",
     "lib/client.js",
+    "lib/client.js.map",
     "cordis.patch.yml",
     "docs/"
   ],
+  "scripts": {
+    "build": "tsdown",
+    "prepare": "tsdown",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/react": "~18.3.1",
+    "tsdown": "^0.23.0",
+    "typescript": "^5.9.3"
+  },
   "license": "MIT"
 }

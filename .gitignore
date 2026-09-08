@@ -1,6 +1,8 @@
 # dependencies / build output
 node_modules/
+lib/
 dist/
+.build/
 *.log
 
 # OS / editor

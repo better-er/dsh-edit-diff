@@ -41,13 +41,19 @@
 
 ## 安装
 
+**从 GitHub 安装**：源码在 `src/`，`lib/` 不入仓库，安装时 npm 会触发 `prepare` 脚本现场构建。
+
 ```powershell
 dsh plugin --profile web add github:better-er/dsh-edit-diff
 ```
 
-或安装 npm 发布的版本：`dsh plugin --profile web add dsh-edit-diff`。
+**从 npm 安装**：包内已含构建产物 `lib/index.js` 与 `lib/client.js`，安装时不再构建。
 
-一条命令装完即生效，自动挂载，重启 DSH web 后启用，无需手工编辑任何组合文件。
+```powershell
+dsh plugin --profile web add dsh-edit-diff
+```
+
+两种方式装完都会自动挂载，重启 DSH web 后启用，无需手工编辑任何文件。
 
 ## 卸载
 
@@ -65,8 +71,18 @@ dsh plugin --profile web remove dsh-edit-diff
 - **UI 挂载点**：接管 keyed 槽位 `tool.call.toolview` 的 `edit` 与 `write` 两个 key。
 - **遮蔽而非冲突**：注册时显式传 `priority: -1`低于内置 `file-mutation-toolview` 的默认 0，用更低优先级遮蔽默认渲染，而不是在同一优先级上 clash。
 - **PTC 模式**：通过 `callId` 包含 `:code:` 判断是否为 `run_code` 子调用，从 `argsRaw` 中提取 `old_string`/`new_string` 即 edit 或 `content` 即 write 动态构建 diff。
-- **无构建**：`lib/client.js` 是按 DSH client bundle 产出的注册式模块，源码即产物，改完即用。
-- 纯 JavaScript 单文件，不引入任何额外 npm 依赖diff 算法就地内联。
+- **构建型**：TypeScript 源码位于 `src/`，`pnpm build` 通过 tsdown 生成 `lib/index.js`、`lib/index.d.ts`、`lib/client.js` 与 sourcemap，运行时只加载 `lib/` 发布产物。
+- 无运行时 npm 依赖，diff 算法就地内联；浏览器端只向宿主模块表请求 react。
+
+本地开发：
+
+```powershell
+pnpm install
+pnpm typecheck
+pnpm build
+```
+
+改完源码需重新 `pnpm build`，DSH web 的 HMR 观察到 `lib/client.js` 变化后自动重载。
 
 ## License
 

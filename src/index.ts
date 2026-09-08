@@ -7,7 +7,7 @@
 /** 插件名，即配置条目 id。 */
 const name = "dsh-edit-diff";
 /** 不使用任何主机端服务。 */
-const inject = [];
+const inject: string[] = [];
 /** 本浏览器端插件无主机端行为。 */
 function apply() {}
 export { apply, inject, name };
