@@ -88,8 +88,8 @@ interface DiffCardProps {
 
 /** 宿主 slots 服务的最小子集。 */
 interface SlotsService {
-  inject(name: string, register: () => void): void
-  register(options: { name: string; key: string; priority: number }, component: (props: DiffCardProps) => React.ReactElement): void
+  inject(name: string, register: () => void | (() => void)): () => void
+  register(options: { name: string; key: string; priority: number }, component: (props: DiffCardProps) => React.ReactElement): () => void
 }
 
 /** 宿主 timer 服务的最小子集。 */
@@ -97,10 +97,69 @@ interface TimerService {
   timeout(callback: () => void, ms: number): unknown
 }
 
-/** Cordis 上下文的最小子集，插件只用到 get 与 effect。 */
+/** Cordis 上下文的最小子集，插件只用到 get、inject 与 effect。 */
 interface PluginContext {
   get?(name: string): unknown
-  effect(callback: () => void | (() => void)): void
+  inject?(deps: readonly string[], callback: (ctx: PluginContext) => void): void
+  effect(callback: () => void | (() => void)): (() => void) | void
+}
+
+// ==================== 额外工具的参数名 ====================
+
+/** 浏览器端读到的 extraTools 条目。 */
+interface ExtraToolConfig {
+  name: string
+  pathKey?: string
+  oldKey?: string
+  newKey?: string
+  contentKey?: string
+}
+
+/** settings 命名空间 dsh-edit-diff 的解析值。 */
+interface PluginConfig {
+  extraTools?: ExtraToolConfig[]
+}
+
+/** settings 服务的最小子集。 */
+interface SettingsScopeService {
+  bind<T>(spec: { namespace: string }): SettingsScopeFace<T>
+}
+
+/** 一个 settings 命名空间的读取面。 */
+interface SettingsScopeFace<T> {
+  getSnapshot(): { value: T | undefined }
+  subscribe(listener: () => void): () => void
+}
+
+/** 读取工具参数用的参数名。 */
+interface KeySpec {
+  pathKey: string
+  oldKey: string
+  newKey: string
+  contentKey: string
+}
+
+/** 原生 edit 与 write 的参数名，也是未声明覆盖时的默认值。 */
+const DEFAULT_SPEC: KeySpec = { pathKey: 'file_path', oldKey: 'old_string', newKey: 'new_string', contentKey: 'content' }
+
+/** 额外接管的工具名到参数名，由 settings 的 extraTools 填充。 */
+const extraSpecs = new Map<string, KeySpec>()
+
+/** 把配置条目补全成完整参数名。 */
+function toKeySpec(tool: ExtraToolConfig): KeySpec {
+  return {
+    pathKey: tool.pathKey ?? DEFAULT_SPEC.pathKey,
+    oldKey: tool.oldKey ?? DEFAULT_SPEC.oldKey,
+    newKey: tool.newKey ?? DEFAULT_SPEC.newKey,
+    contentKey: tool.contentKey ?? DEFAULT_SPEC.contentKey,
+  }
+}
+
+/** 取工具名对应的参数名，非本插件接管的工具返回 null。 */
+function specFor(toolName: string | undefined): KeySpec | null {
+  if (toolName === 'edit' || toolName === 'write') return DEFAULT_SPEC
+  if (toolName === undefined) return null
+  return extraSpecs.get(toolName) ?? null
 }
 
 // ==================== 近线性 diff 核心 ====================
@@ -259,7 +318,7 @@ function narrowDiffs(diffs: unknown): FileDiff[] | null {
 }
 
 /** 从卡片数据块中取出 diff，取不到时回退到参数意图。 */
-function extractDiffs(block: ToolBlock): FileDiff[] | null {
+function extractDiffs(block: ToolBlock, spec: KeySpec | null): FileDiff[] | null {
   const done = 'kind' in block
   // PTC 子调用标记：新版 DSH 用 parentCallId；旧版 callId 含 ':code:'，双兼容
   const subCall = block.parentCallId !== void 0 ||
@@ -284,19 +343,20 @@ function extractDiffs(block: ToolBlock): FileDiff[] | null {
   if (done && !subCall && block.isError === true) return null
   const rawArgs = (block.call !== undefined ? block.call.argsRaw : block.argsRaw) ?? ''
   const argsRaw = typeof rawArgs === 'string' ? rawArgs : ''
-  const name = block.call !== undefined ? block.call.name : block.name
-  if (name === 'edit' || name === 'write') {
+  if (spec !== null) {
     try {
       const args: unknown = JSON.parse(argsRaw)
       if (args !== null && typeof args === 'object') {
         const record = args as Record<string, unknown>
-        const filePath = record.file_path
+        const filePath = record[spec.pathKey]
         if (typeof filePath === 'string' && filePath !== '') {
-          if (name === 'write' && typeof record.content === 'string') {
-            return narrowDiffs([{ path: filePath, oldText: null, newText: record.content }])
+          const oldText = record[spec.oldKey]
+          const newText = record[spec.newKey]
+          if (typeof oldText === 'string' && typeof newText === 'string') {
+            return narrowDiffs([{ path: filePath, oldText: oldText || null, newText }])
           }
-          if (name === 'edit' && typeof record.old_string === 'string' && typeof record.new_string === 'string') {
-            return narrowDiffs([{ path: filePath, oldText: record.old_string || null, newText: record.new_string }])
+          if (typeof record[spec.contentKey] === 'string') {
+            return narrowDiffs([{ path: filePath, oldText: null, newText: record[spec.contentKey] as string }])
           }
         }
       }
@@ -338,17 +398,25 @@ function firstLine(t: string): string {
 /** 由数据块推导卡片模型。 */
 function buildCardModel(block: ToolBlock, toolName: string | undefined, cwd: string | undefined): CardModel {
   const done = 'kind' in block
+  const spec = specFor(toolName)
   const rawArgs = done ? (block.call?.argsRaw ?? '') : (block.argsRaw ?? '')
   const argsRaw = typeof rawArgs === 'string' ? rawArgs : ''
   const state: CardState = !done ? 'running' : block.error?.code === 'interrupted' ? 'stopped' : block.isError === true ? 'error' : 'ok'
+  let kind: 'edit' | 'write' | null = toolName === 'edit' ? 'edit' : toolName === 'write' ? 'write' : null
   let filePath: string | undefined
   let summary = ''
   try {
     const parsed: unknown = JSON.parse(argsRaw)
     if (parsed !== null && typeof parsed === 'object') {
       const record = parsed as Record<string, unknown>
-      const p = record.file_path ?? record.path
+      const p = (spec === null ? undefined : record[spec.pathKey]) ?? record.path
       if (typeof p === 'string' && p !== '') filePath = firstLine(p)
+      if (kind === null && spec !== null) {
+        const oldText = record[spec.oldKey]
+        const newText = record[spec.newKey]
+        if (typeof oldText === 'string' && typeof newText === 'string') kind = 'edit'
+        else if (typeof record[spec.contentKey] === 'string') kind = 'write'
+      }
       const values = Object.values(record).filter((v): v is string => typeof v === 'string' && v !== '')
       summary = values.length > 0 ? firstLine(values[0] as string) : argsRaw
     } else summary = firstLine(argsRaw)
@@ -358,8 +426,8 @@ function buildCardModel(block: ToolBlock, toolName: string | undefined, cwd: str
     const root = cwd.replace(/[/\\]+$/, '')
     if (filePath.startsWith(root + '/') || filePath.startsWith(root + '\\')) summary = filePath.slice(root.length + 1)
   }
-  const title = toolName === 'edit' ? 'Edit' : toolName === 'write' ? 'Write' : (toolName ?? '')
-  const diffs = extractDiffs(block)
+  const title = kind === 'edit' ? 'Edit' : kind === 'write' ? 'Write' : (toolName ?? '')
+  const diffs = extractDiffs(block, spec)
   const output = done ? (resultText(block) || null) : null
   return { title, summary, filePath, state, diffs, output }
 }
@@ -568,8 +636,48 @@ const plugin = {
     slots.inject('tool.call.toolview', () => {
       // priority 要低于默认 0，遮蔽 file-mutation-toolview 的 edit/write，最低者渲染。
       // 若也传 0 会在同一 key 上 clash，而非替换。
-      slots.register({ name: 'tool.call.toolview', key: 'edit', priority: -1 }, DiffCard)
-      slots.register({ name: 'tool.call.toolview', key: 'write', priority: -1 }, DiffCard)
+      const disposeEdit = slots.register({ name: 'tool.call.toolview', key: 'edit', priority: -1 }, DiffCard)
+      const disposeWrite = slots.register({ name: 'tool.call.toolview', key: 'write', priority: -1 }, DiffCard)
+      return () => {
+        disposeEdit()
+        disposeWrite()
+      }
+    })
+
+    // extraTools 经 settings 命名空间到达。没有挂载 settings 时上面两张卡片照常工作。
+    if (typeof ctx.inject !== 'function') return
+    ctx.inject(['settingsScope'], (settingsCtx) => {
+      const settingsScope = settingsCtx.get?.('settingsScope') as SettingsScopeService | undefined
+      if (settingsScope === undefined || typeof settingsScope.bind !== 'function') return
+      const scope = settingsScope.bind<PluginConfig>({ namespace: 'dsh-edit-diff' })
+      let disposeExtra: (() => void) | void
+      // 配置变化时整批重建：先换参数名表，再重建这批 key 的注册。
+      const sync = (): void => {
+        if (typeof disposeExtra === 'function') disposeExtra()
+        const value = scope.getSnapshot().value
+        const tools = Array.isArray(value?.extraTools) ? value.extraTools : []
+        extraSpecs.clear()
+        // slots.inject 返回注销函数，slots.register 也是；两者都要收起来，否则旧注册留在槽位里，下一次 sync 会对同 key 同 priority 再注册一次并抛错。
+        const disposers: Array<() => void> = []
+        for (const tool of tools) {
+          if (tool === null || typeof tool !== 'object') continue
+          if (typeof tool.name !== 'string' || tool.name === '') continue
+          const toolName = tool.name
+          if (toolName === 'edit' || toolName === 'write') continue
+          // 同名条目只认第一次。extraSpecs 刚清空，命中即已注册过。
+          if (extraSpecs.has(toolName)) continue
+          extraSpecs.set(toolName, toKeySpec(tool))
+          disposers.push(slots.inject('tool.call.toolview', () =>
+            slots.register({ name: 'tool.call.toolview', key: toolName, priority: -1 }, DiffCard)))
+        }
+        disposeExtra = () => {
+          for (const dispose of disposers) dispose()
+        }
+      }
+      const unsubscribe = scope.subscribe(sync)
+      // settingsScope 卸载时撤掉订阅，注册本身由各自的 effect 随 fiber 回收。
+      ctx.effect(() => () => unsubscribe())
+      sync()
     })
   },
 }

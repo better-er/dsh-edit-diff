@@ -2,7 +2,7 @@
 
 接管 DSH 浏览器的 `edit` / `write` 工具卡片，用近线性行级 diff 做真正的差异展示，消除内置 DiffBlock 把「未变化的相同行」在删除区红 `-` 行和新增区绿 `+` 行各渲染一遍的重复。
 
-纯浏览器端 client 插件，单击即换新渲染，不碰 DSH 源码。
+渲染全在浏览器端，主机端半身只负责把配置转成 settings 命名空间。单击即换新渲染，不碰 DSH 源码。
 
 ## 引言
 
@@ -23,6 +23,47 @@
 - **复制与统计**：复制只含差异行，`- `/`+ ` 前缀；底部 `└ +A -R · N file(s)` 变更统计。
 - **单文件与多文件**：`edit` / `write` 双双接管，覆盖新建只显示绿色新增，纯删、多 hunk 等场景。
 - **PTC 模式兼容**：`run_code` 子调用中的 `edit` / `write` 同样显示优化后的修改 diff，通过 `callId` 中的 `:code:` 标记识别子调用。注意 `write` 是全文件覆写，无旧内容，只能显示全新增；想看精确 diff 应使用 `edit`。
+- **接管其他工具**：`extraTools` 让 [dsh-remote-file-system](https://github.com/better-er/dsh-remote-file-system) 的 `edit_remote`、`write_remote` 一并使用优化显示，插件已默认开启这两个，参数名不同的工具可逐项覆盖。
+
+## 配置
+
+`extraTools` 列出 `edit` 与 `write` 之外要接管的工具。每条写工具名和读取参数用的参数名，参数名省略时按 `file_path`、`old_string`、`new_string`、`content` 取值。
+
+插件自带的 `cordis.patch.yml` 已经默认接管 [dsh-remote-file-system](https://github.com/better-er/dsh-remote-file-system) 的这两个远程工具：
+
+```yaml
+- insert:
+    - id: dsh-edit-diff
+      name: dsh-edit-diff
+      config:
+        extraTools:
+          - name: edit_remote
+          - name: write_remote
+```
+
+它们的参数名和原生一致，只写名字即可。参数名不同的工具再补：
+
+```yaml
+    extraTools:
+      - name: some_tool
+        pathKey: target
+        oldKey: before
+        newKey: after
+        contentKey: body
+```
+
+要改这份默认，在 profile 的 `cordis.patch.yml` 里按 id 覆盖：
+
+```yaml
+- id: dsh-edit-diff
+  config:
+    extraTools:
+      - name: some_tool
+```
+
+判断规则：参数里同时有旧文本与新文本就按 edit 型渲染，否则有整文件内容就按 write 型渲染。
+
+配置经 settings 命名空间 `dsh-edit-diff` 送到浏览器端，settings 变化会让浏览器端重建这批 key 的注册。
 
 ## 它长什么样
 
@@ -67,12 +108,12 @@ dsh plugin --profile web remove dsh-edit-diff
 
 - 是**标准形态的 dsh client 插件**，声明 `dsh.client`，导出 `./client`。
 - 同时声明了 `dsh.bundle`，因此也是一个**自挂载的 bundle 层插件**：用 `dsh plugin --profile <name> add` 从 GitHub 安装后，会被自动识别为 profile layer 并挂载，无需手工写组合 entry。
-- 纯浏览器半身，无 host 行为；`lib/index.js` 是无操作的 no-op 主机插件标准双面包约定。
-- **UI 挂载点**：接管 keyed 槽位 `tool.call.toolview` 的 `edit` 与 `write` 两个 key。
+- 主机端半身只做一件事：用 `ctx.settings.installSection()` 把 entry 配置注册成 settings 命名空间 `dsh-edit-diff`。浏览器端拿不到 cordis 配置，这是双半插件传配置的唯一通道。
+- **UI 挂载点**：接管 keyed 槽位 `tool.call.toolview` 的 `edit` 与 `write` 两个 key，以及 `extraTools` 里声明的每个工具名。
 - **遮蔽而非冲突**：注册时显式传 `priority: -1`低于内置 `file-mutation-toolview` 的默认 0，用更低优先级遮蔽默认渲染，而不是在同一优先级上 clash。
 - **PTC 模式**：通过 `callId` 包含 `:code:` 判断是否为 `run_code` 子调用，从 `argsRaw` 中提取 `old_string`/`new_string` 即 edit 或 `content` 即 write 动态构建 diff。
 - **构建型**：TypeScript 源码位于 `src/`，`pnpm build` 通过 tsdown 生成 `lib/index.js`、`lib/index.d.ts`、`lib/client.js` 与 sourcemap，运行时只加载 `lib/` 发布产物。
-- 无运行时 npm 依赖，diff 算法就地内联；浏览器端只向宿主模块表请求 react。
+- diff 算法就地内联，浏览器端只向宿主模块表请求 react；主机端向宿主解析 `@deepseek-ai/schemastery`。
 
 本地开发：
 
