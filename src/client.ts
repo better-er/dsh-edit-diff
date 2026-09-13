@@ -88,8 +88,8 @@ interface DiffCardProps {
 
 /** 宿主 slots 服务的最小子集。 */
 interface SlotsService {
-  inject(name: string, register: () => void): void
-  register(options: { name: string; key: string; priority: number }, component: (props: DiffCardProps) => React.ReactElement): void
+  inject(name: string, register: () => void | (() => void)): () => void
+  register(options: { name: string; key: string; priority: number }, component: (props: DiffCardProps) => React.ReactElement): () => void
 }
 
 /** 宿主 timer 服务的最小子集。 */
@@ -636,8 +636,12 @@ const plugin = {
     slots.inject('tool.call.toolview', () => {
       // priority 要低于默认 0，遮蔽 file-mutation-toolview 的 edit/write，最低者渲染。
       // 若也传 0 会在同一 key 上 clash，而非替换。
-      slots.register({ name: 'tool.call.toolview', key: 'edit', priority: -1 }, DiffCard)
-      slots.register({ name: 'tool.call.toolview', key: 'write', priority: -1 }, DiffCard)
+      const disposeEdit = slots.register({ name: 'tool.call.toolview', key: 'edit', priority: -1 }, DiffCard)
+      const disposeWrite = slots.register({ name: 'tool.call.toolview', key: 'write', priority: -1 }, DiffCard)
+      return () => {
+        disposeEdit()
+        disposeWrite()
+      }
     })
 
     // extraTools 经 settings 命名空间到达。没有挂载 settings 时上面两张卡片照常工作。
@@ -653,23 +657,26 @@ const plugin = {
         const value = scope.getSnapshot().value
         const tools = Array.isArray(value?.extraTools) ? value.extraTools : []
         extraSpecs.clear()
-        const names: string[] = []
+        // slots.inject 返回注销函数，slots.register 也是；两者都要收起来，否则旧注册留在槽位里，下一次 sync 会对同 key 同 priority 再注册一次并抛错。
+        const disposers: Array<() => void> = []
         for (const tool of tools) {
           if (tool === null || typeof tool !== 'object') continue
           if (typeof tool.name !== 'string' || tool.name === '') continue
-          if (tool.name === 'edit' || tool.name === 'write') continue
-          extraSpecs.set(tool.name, toKeySpec(tool))
-          names.push(tool.name)
+          const toolName = tool.name
+          if (toolName === 'edit' || toolName === 'write') continue
+          // 同名条目只认第一次。extraSpecs 刚清空，命中即已注册过。
+          if (extraSpecs.has(toolName)) continue
+          extraSpecs.set(toolName, toKeySpec(tool))
+          disposers.push(slots.inject('tool.call.toolview', () =>
+            slots.register({ name: 'tool.call.toolview', key: toolName, priority: -1 }, DiffCard)))
         }
-        disposeExtra = ctx.effect(() => {
-          for (const name of names) {
-            slots.inject('tool.call.toolview', () => {
-              slots.register({ name: 'tool.call.toolview', key: name, priority: -1 }, DiffCard)
-            })
-          }
-        })
+        disposeExtra = () => {
+          for (const dispose of disposers) dispose()
+        }
       }
-      scope.subscribe(sync)
+      const unsubscribe = scope.subscribe(sync)
+      // settingsScope 卸载时撤掉订阅，注册本身由各自的 effect 随 fiber 回收。
+      ctx.effect(() => () => unsubscribe())
       sync()
     })
   },
