@@ -1,7 +1,7 @@
 {
   "name": "dsh-edit-diff",
   "version": "0.4.1",
-  "description": "「DSH·质量 diff」接管 edit/write 及 extraTools 配置的其他工具卡片：行级去重与行内高亮，消除相同内容在删除与新增两区的重复；兼容 PTC 模式，标准可安装的 dsh 客户端插件",
+  "description": "「DSH·质量 diff」：接管 edit/write 及 extraTools 配置的其他工具卡片：行级去重与行内高亮，消除相同内容在删除与新增两区的重复；兼容 PTC 模式，标准可安装的 dsh 客户端插件",
   "keywords": [
     "deepseek-harness",
     "dsh",
