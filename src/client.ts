@@ -120,13 +120,13 @@ interface PluginConfig {
   extraTools?: ExtraToolConfig[]
 }
 
-/** settings 服务的最小子集。 */
-interface SettingsScopeService {
-  bind<T>(spec: { namespace: string }): SettingsScopeFace<T>
+/** 客户端配置表单服务的最小子集。 */
+interface ConfigFormsService {
+  get<T>(entryId: string): ConfigFormFace<T>
 }
 
-/** 一个 settings 命名空间的读取面。 */
-interface SettingsScopeFace<T> {
+/** 一个 profile entry 的配置表单读取面。 */
+interface ConfigFormFace<T> {
   getSnapshot(): { value: T | undefined }
   subscribe(listener: () => void): () => void
 }
@@ -644,12 +644,12 @@ const plugin = {
       }
     })
 
-    // extraTools 经 settings 命名空间到达。没有挂载 settings 时上面两张卡片照常工作。
+    // extraTools 经插件 entry 的配置表单到达。没有配置表单时上面两张卡片照常工作。
     if (typeof ctx.inject !== 'function') return
-    ctx.inject(['settingsScope'], (settingsCtx) => {
-      const settingsScope = settingsCtx.get?.('settingsScope') as SettingsScopeService | undefined
-      if (settingsScope === undefined || typeof settingsScope.bind !== 'function') return
-      const scope = settingsScope.bind<PluginConfig>({ namespace: 'dsh-edit-diff' })
+    ctx.inject(['configForms'], (settingsCtx) => {
+      const configForms = settingsCtx.get?.('configForms') as ConfigFormsService | undefined
+      if (configForms === undefined || typeof configForms.get !== 'function') return
+      const scope = configForms.get<PluginConfig>('dsh-edit-diff')
       let disposeExtra: (() => void) | void
       // 配置变化时整批重建：先换参数名表，再重建这批 key 的注册。
       const sync = (): void => {
@@ -675,7 +675,7 @@ const plugin = {
         }
       }
       const unsubscribe = scope.subscribe(sync)
-      // settingsScope 卸载时撤掉订阅，注册本身由各自的 effect 随 fiber 回收。
+      // 配置表单卸载时撤掉订阅，注册本身由各自的 effect 随 fiber 回收。
       ctx.effect(() => () => unsubscribe())
       sync()
     })

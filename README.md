@@ -108,7 +108,7 @@ dsh plugin --profile web remove dsh-edit-diff
 
 - 是**标准形态的 dsh client 插件**，声明 `dsh.client`，导出 `./client`。
 - 同时声明了 `dsh.bundle`，因此也是一个**自挂载的 bundle 层插件**：用 `dsh plugin --profile <name> add` 从 GitHub 安装后，会被自动识别为 profile layer 并挂载，无需手工写组合 entry。
-- 主机端半身只做一件事：用 `ctx.settings.installSection()` 把 entry 配置注册成 settings 命名空间 `dsh-edit-diff`。浏览器端拿不到 cordis 配置，这是双半插件传配置的唯一通道。
+- 主机端半身在 `ctx.inject(['settings'], ...)` 子级里以 effect 注册 `settings.configure({ auto: false }, ctx.fiber)`，声明本插件自带配置页面；配置字段用 `.volatile()` 声明后才会出现在设置表单中。浏览器端拿不到 cordis 配置，改用 `ctx.configForms.get('dsh-edit-diff')` 读解析后的值，这是双半插件传配置的唯一通道。
 - **UI 挂载点**：接管 keyed 槽位 `tool.call.toolview` 的 `edit` 与 `write` 两个 key，以及 `extraTools` 里声明的每个工具名。
 - **遮蔽而非冲突**：注册时显式传 `priority: -1`低于内置 `file-mutation-toolview` 的默认 0，用更低优先级遮蔽默认渲染，而不是在同一优先级上 clash。
 - **PTC 模式**：通过 `callId` 包含 `:code:` 判断是否为 `run_code` 子调用，从 `argsRaw` 中提取 `old_string`/`new_string` 即 edit 或 `content` 即 write 动态构建 diff。
