@@ -1,7 +1,7 @@
 {
   "name": "dsh-edit-diff",
-  "version": "0.4.0",
-  "description": "质量 diff：接管 edit/write 及 extraTools 配置的其他工具卡片，行级去重与行内高亮，消除相同内容在删除与新增两区的重复；兼容 PTC 模式，标准可安装的 dsh 客户端插件",
+  "version": "0.4.1",
+  "description": "「DSH·质量 diff」接管 edit/write 及 extraTools 配置的其他工具卡片：行级去重与行内高亮，消除相同内容在删除与新增两区的重复；兼容 PTC 模式，标准可安装的 dsh 客户端插件",
   "keywords": [
     "deepseek-harness",
     "dsh",
@@ -54,14 +54,16 @@
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.2",
-    "@deepseek-ai/dsh-settings": "^0.1.5-rc.2",
-    "@deepseek-ai/schemastery": "^3.18.2"
+    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/dsh": "^0.1.7-rc.2",
+    "@deepseek-ai/dsh-settings": "^0.1.7-rc.2",
+    "@deepseek-ai/schemastery": "^3.18.4"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "^4.0.2",
-    "@deepseek-ai/dsh-settings": "^0.1.5-rc.2",
-    "@deepseek-ai/schemastery": "^3.18.2",
+    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/cosmokit": "^1.8.5",
+    "@deepseek-ai/dsh-settings": "0.1.7-rc.2",
+    "@deepseek-ai/schemastery": "^3.18.4",
     "@types/react": "~18.3.1",
     "tsdown": "^0.23.0",
     "typescript": "^5.9.3"
