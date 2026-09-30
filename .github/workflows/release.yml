@@ -108,6 +108,17 @@ jobs:
         if: steps.published.outputs.published != 'true'
         run: pnpm build
 
+      # 与 CI 共用同一份产物清单，按插件形态增删条目，产物缺失会在此失败。
+      - name: Verify build outputs
+        if: steps.published.outputs.published != 'true'
+        run: |
+          test -f lib/index.js
+          test -f lib/index.d.ts
+          test -f lib/client.js
+          test -f lib/client.js.map
+          test -f cordis.patch.yml
+          echo "构建产物齐全：lib/index.js · lib/index.d.ts · lib/client.js · lib/client.js.map · cordis.patch.yml"
+
       # Trusted Publishing：npm 凭 workflow 的 OIDC 身份直接授权，无需 NPM_TOKEN；--provenance 会在 npm 上附构建来源证明。
       - name: Publish to npm
         if: steps.published.outputs.published != 'true'
