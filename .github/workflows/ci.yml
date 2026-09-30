@@ -46,11 +46,12 @@ jobs:
       - name: Build
         run: pnpm build
 
-      # 本插件是双半身且产出 dts，产物缺失会在此失败。
+      # 本插件是双半身、产出 dts 且带 sourcemap，产物缺失会在此失败。
       - name: Verify build outputs
         run: |
           test -f lib/index.js
           test -f lib/index.d.ts
           test -f lib/client.js
+          test -f lib/client.js.map
           test -f cordis.patch.yml
-          echo "构建产物齐全：lib/index.js · lib/index.d.ts · lib/client.js · cordis.patch.yml"
+          echo "构建产物齐全：lib/index.js · lib/index.d.ts · lib/client.js · lib/client.js.map · cordis.patch.yml"
