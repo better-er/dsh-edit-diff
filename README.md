@@ -1,4 +1,4 @@
-# dsh·修改显示优化插件
+# DSH·质量 diff
 
 接管 DSH 浏览器的 `edit` / `write` 工具卡片，用近线性行级 diff 做真正的差异展示，消除内置 DiffBlock 把「未变化的相同行」在删除区红 `-` 行和新增区绿 `+` 行各渲染一遍的重复。
 
@@ -12,6 +12,12 @@
 
 另外，PTC 模式下默认只显示调用成功与否，本插件也做了适配，能正常显示修改内容。
 
+## 与另外三件的关系
+
+它是这四件里的头一件。写入这件事第一次看得清之后，才显出另外三处漏：覆写不可逆、内容不合法、远程够不着。对应的分别是 [dsh-write-create-only](https://github.com/better-er/dsh-write-create-only)、[dsh-write-rule-guard](https://github.com/better-er/dsh-write-rule-guard) 与 [dsh-remote-file-system](https://github.com/better-er/dsh-remote-file-system)，四件的首次提交时间也与这层先后一致。
+
+本插件默认已接管最后那件的 `edit_remote` 与 `write_remote`，见下面的 `extraTools`。
+
 ## 功能
 
 - **仅差异行**：完全相同行直接不渲染，只显示真实变化的删除行红 `-` 与新增行绿 `+`，消除重复。
@@ -24,6 +30,51 @@
 - **单文件与多文件**：`edit` / `write` 双双接管，覆盖新建只显示绿色新增，纯删、多 hunk 等场景。
 - **PTC 模式兼容**：`run_code` 子调用中的 `edit` / `write` 同样显示优化后的修改 diff，通过 `callId` 中的 `:code:` 标记识别子调用。注意 `write` 是全文件覆写，无旧内容，只能显示全新增；想看精确 diff 应使用 `edit`。
 - **接管其他工具**：`extraTools` 让 [dsh-remote-file-system](https://github.com/better-er/dsh-remote-file-system) 的 `edit_remote`、`write_remote` 一并使用优化显示，插件已默认开启这两个，参数名不同的工具可逐项覆盖。
+
+## 它长什么样
+
+|  | 效果图 |
+| --- | --- |
+| 原版 diff | ![原版离谱显示](docs/原版diff.webp) |
+| 本插件 | ![插件优化显示](docs/优化diff.webp) |
+
+## 演示视频
+
+光看静态截图不过瘾？看看这个插件的实际演示效果。
+
+| dsh-edit-diff 插件演示 · 66 秒 |
+| :---: |
+| [![dsh-edit-diff 插件演示](https://i2.hdslb.com/bfs/archive/dd90d9de85da22eae537d53dd77a2034bf841b5e.jpg)](https://www.bilibili.com/video/BV1ect76CENM/) |
+
+四件一起讲的宣传片，中文与日语配音两版同在一个投稿里：
+
+| 文件四件套宣传片 · 一个核心，三个辅助 |
+| :---: |
+| [![文件四件套宣传片](https://i2.hdslb.com/bfs/archive/8a1e21d2afe4c23f587ed11bd94ef9172ea5651e.jpg)](https://www.bilibili.com/video/BV1EUar6YEp3/) |
+
+## 安装
+
+**从 GitHub 安装**：源码在 `src/`，`lib/` 不入仓库，安装时 npm 会触发 `prepare` 脚本现场构建。
+
+```powershell
+dsh plugin --profile web add github:better-er/dsh-edit-diff
+```
+
+**从 npm 安装**：包内已含构建产物 `lib/index.js` 与 `lib/client.js`，安装时不再构建。
+
+```powershell
+dsh plugin --profile web add dsh-edit-diff
+```
+
+两种方式装完都会自动挂载，重启 DSH web 后启用，无需手工编辑任何文件。
+
+## 卸载
+
+```powershell
+dsh plugin --profile web remove dsh-edit-diff
+```
+
+彻底移除，重启 DSH web 后不再加载。
 
 ## 配置
 
@@ -61,48 +112,9 @@
       - name: some_tool
 ```
 
-判断规则：参数里同时有旧文本与新文本就按 edit 型渲染，否则有整文件内容就按 write 型渲染。
+判断规则：参数里同时有旧文本与新文本就按 `edit` 型渲染，否则有整文件内容就按 `write` 型渲染。
 
 配置经 settings 命名空间 `dsh-edit-diff` 送到浏览器端，settings 变化会让浏览器端重建这批 key 的注册。
-
-## 它长什么样
-
-|  | 效果图 |
-| --- | --- |
-| 原版 diff | ![原版离谱显示](docs/原版diff.webp) |
-| 本插件 | ![插件优化显示](docs/优化diff.webp) |
-
-## 演示视频
-
-光看静态截图不过瘾？看看这个插件的实际演示效果：
-
-| dsh-edit-diff 插件演示 · 66 秒 |
-| :---: |
-| [![dsh-edit-diff 插件演示](https://i2.hdslb.com/bfs/archive/dd90d9de85da22eae537d53dd77a2034bf841b5e.jpg)](https://www.bilibili.com/video/BV1ect76CENM/) |
-
-## 安装
-
-**从 GitHub 安装**：源码在 `src/`，`lib/` 不入仓库，安装时 npm 会触发 `prepare` 脚本现场构建。
-
-```powershell
-dsh plugin --profile web add github:better-er/dsh-edit-diff
-```
-
-**从 npm 安装**：包内已含构建产物 `lib/index.js` 与 `lib/client.js`，安装时不再构建。
-
-```powershell
-dsh plugin --profile web add dsh-edit-diff
-```
-
-两种方式装完都会自动挂载，重启 DSH web 后启用，无需手工编辑任何文件。
-
-## 卸载
-
-```powershell
-dsh plugin --profile web remove dsh-edit-diff
-```
-
-彻底移除，重启 DSH web 后不再加载。
 
 ## 要求与开发
 
@@ -111,7 +123,7 @@ dsh plugin --profile web remove dsh-edit-diff
 - 主机端半身在 `ctx.inject(['settings'], ...)` 子级里以 effect 注册 `settings.configure({ auto: false }, ctx.fiber)`，声明本插件自带配置页面；配置字段用 `.volatile()` 声明后才会出现在设置表单中。浏览器端拿不到 cordis 配置，改用 `ctx.configForms.get('dsh-edit-diff')` 读解析后的值，这是双半插件传配置的唯一通道。
 - **UI 挂载点**：接管 keyed 槽位 `tool.call.toolview` 的 `edit` 与 `write` 两个 key，以及 `extraTools` 里声明的每个工具名。
 - **遮蔽而非冲突**：注册时显式传 `priority: -1`低于内置 `file-mutation-toolview` 的默认 0，用更低优先级遮蔽默认渲染，而不是在同一优先级上 clash。
-- **PTC 模式**：通过 `callId` 包含 `:code:` 判断是否为 `run_code` 子调用，从 `argsRaw` 中提取 `old_string`/`new_string` 即 edit 或 `content` 即 write 动态构建 diff。
+- **PTC 模式**：通过 `callId` 包含 `:code:` 判断是否为 `run_code` 子调用，从 `argsRaw` 中提取 `old_string`/`new_string` 即 `edit` 或 `content` 即 `write` 动态构建 diff。
 - **构建型**：TypeScript 源码位于 `src/`，`pnpm build` 通过 tsdown 生成 `lib/index.js`、`lib/index.d.ts`、`lib/client.js` 与 sourcemap，运行时只加载 `lib/` 发布产物。
 - diff 算法就地内联，浏览器端只向宿主模块表请求 react；主机端向宿主解析 `@deepseek-ai/schemastery`。
 
