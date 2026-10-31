@@ -5,6 +5,7 @@
 //
 // 接管 edit/write 工具卡片：内置 DiffBlock 对新旧全文逐行染色且不做行级匹配，相同行在红绿两区各渲染一遍。
 // 本插件接管 tool.call.toolview 的 edit/write key，用近线性行级 diff 跳过相同行，替换行做字符级下划线高亮。
+// 单行改动区过大时跳过逐字符对齐，整段标记，避免 Myers 的平方级 trace 把页面拖死。
 // 视觉对齐内置 DiffBlock/ToolRow。卡片默认收起，长 diff 二次折叠。
 //
 // PTC 模式下 run_code 子调用中的 edit/write 同样显示去重 diff，按 callId 的 :code: 标记识别，从 argsRaw 动态构建。
@@ -164,8 +165,14 @@ function specFor(toolName: string | undefined): KeySpec | null {
 
 // ==================== 近线性 diff 核心 ====================
 
-/** 行级 Myers：前缀/后缀收缩后仅对中间核心区跑 diff，返回 op 数组。 */
-function myersDiff(aList: readonly string[], bList: readonly string[]): DiffOp[] {
+/** 行级 Myers 的编辑距离上限，超过就按整块删除加新增处理。上限按平方成本定：1500 时要跑一秒多。 */
+const MAX_LINE_DIFF_EDIT = 600
+
+/** 单行替换对的字符级 diff 规模上限，按两侧改动区字符数之和计。 */
+const MAX_INLINE_CHAR_DIFF = 512
+
+/** 行级 Myers：前缀/后缀收缩后仅对中间核心区跑 diff，返回 op 数组。maxD 限制编辑距离，超过直接退化为整块替换。 */
+function myersDiff(aList: readonly string[], bList: readonly string[], maxD: number = Infinity): DiffOp[] {
   const N = aList.length
   const M = bList.length
   const max = N + M
@@ -173,7 +180,7 @@ function myersDiff(aList: readonly string[], bList: readonly string[]): DiffOp[]
   const trace: Array<Record<number, number>> = []
   let dMax = 0
   let found = false
-  for (let d = 0; d <= max; d++) {
+  for (let d = 0; d <= max && d <= maxD; d++) {
     trace.push({ ...prev })
     const cur: Record<number, number> = {}
     for (let k = -d; k <= d; k += 2) {
@@ -227,7 +234,7 @@ function lineDiff(aLines: readonly string[], bLines: readonly string[]): DiffOp[
   for (let i = 0; i < p; i++) ops.push({ type: 'same', a: i, b: i })
   const aMid = aLines.slice(p, al - s)
   const bMid = bLines.slice(p, bl - s)
-  for (const op of myersDiff(aMid, bMid)) {
+  for (const op of myersDiff(aMid, bMid, MAX_LINE_DIFF_EDIT)) {
     ops.push({ type: op.type, a: op.a === -1 ? -1 : op.a + p, b: op.b === -1 ? -1 : op.b + p })
   }
   for (let i = 0; i < s; i++) ops.push({ type: 'same', a: al - s + i, b: bl - s + i })
@@ -259,8 +266,47 @@ function charRanges(ops: readonly DiffOp[]): { del: CharRange[]; add: CharRange[
   return { del: mk(delIdx), add: mk(addIdx) }
 }
 
+/** 码点下标到 UTF-16 偏移的映射，末尾补上字符串长度，供渲染时 slice。 */
+function codePointOffsets(s: string): number[] {
+  const out = [0]
+  let offset = 0
+  for (const ch of s) {
+    offset += ch.length
+    out.push(offset)
+  }
+  return out
+}
+
+/**
+ * 单行替换对的字符级高亮。
+ *
+ * 先做公共前缀/后缀收缩，仅对中间改动区跑 Myers。改动区超过 MAX_INLINE_CHAR_DIFF 时放弃逐字符对齐，
+ * 整段标成改动：一段两千字符、内容完全不同的行会让 trace 按 D² 膨胀到上百万条键值对，浏览器直接无响应。
+ */
 function lineHighlight(oldStr: string, newStr: string): { del: CharRange[]; add: CharRange[] } {
-  return charRanges(myersDiff([...oldStr], [...newStr]))
+  const a = [...oldStr]
+  const b = [...newStr]
+  const minLen = Math.min(a.length, b.length)
+  let p = 0
+  while (p < minLen && a[p] === b[p]) p++
+  let s = 0
+  while (s < minLen - p && a[a.length - 1 - s] === b[b.length - 1 - s]) s++
+  const aMidLen = a.length - s - p
+  const bMidLen = b.length - s - p
+  if (aMidLen <= 0 && bMidLen <= 0) return { del: [], add: [] }
+  const offA = codePointOffsets(oldStr)
+  const offB = codePointOffsets(newStr)
+  const toRange = (offsets: number[], start: number, end: number): CharRange => [offsets[start] ?? 0, offsets[end] ?? 0]
+  if (aMidLen + bMidLen > MAX_INLINE_CHAR_DIFF) {
+    return {
+      del: aMidLen <= 0 ? [] : [toRange(offA, p, p + aMidLen)],
+      add: bMidLen <= 0 ? [] : [toRange(offB, p, p + bMidLen)],
+    }
+  }
+  const ranges = charRanges(myersDiff(a.slice(p, a.length - s), b.slice(p, b.length - s)))
+  const shift = (list: CharRange[], offsets: number[]): CharRange[] =>
+    list.map(([start, end]) => toRange(offsets, start + p, end + p))
+  return { del: shift(ranges.del, offA), add: shift(ranges.add, offB) }
 }
 
 function contentLines(text: string): string[] {
