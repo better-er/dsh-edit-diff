@@ -314,7 +314,68 @@ function contentLines(text: string): string[] {
   return (text.endsWith('\n') ? text.slice(0, -1) : text).split('\n')
 }
 
-/** 从 ops 构建渲染行，仅含真实差异；替换对删/增行数相等做行内字符高亮。 */
+/** 不等长替换块的对齐上限，行数与字符总量都卡住，超限退回整块显示。 */
+const MAX_ALIGN_LINES = 200
+const MAX_ALIGN_CHARS = 200_000
+
+/** 行相似度低于这个值就不配对，避免无关行被硬凑成一对。 */
+const MIN_PAIR_SIMILARITY = 0.5
+
+/** 行相似度：公共前后缀合计占较长行的比例，线性于行长。 */
+function lineSimilarity(a: string, b: string): number {
+  const maxLen = Math.max(a.length, b.length)
+  if (maxLen === 0) return 1
+  const minLen = Math.min(a.length, b.length)
+  let p = 0
+  while (p < minLen && a[p] === b[p]) p++
+  let s = 0
+  while (s < minLen - p && a[a.length - 1 - s] === b[b.length - 1 - s]) s++
+  return (p + s) / maxLen
+}
+
+/** 单调对齐替换块两侧的行，返回 [删除行下标, 新增行下标] 序列；超过规模上限返回 null。 */
+function alignBlock(olds: readonly string[], adds: readonly string[]): Array<[number, number]> | null {
+  const n = olds.length
+  const m = adds.length
+  if (n === 0 || m === 0) return []
+  if (n + m > MAX_ALIGN_LINES) return null
+  let chars = 0
+  for (const line of olds) chars += line.length
+  for (const line of adds) chars += line.length
+  if (chars > MAX_ALIGN_CHARS) return null
+
+  const dp: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0))
+  const from: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0))
+  for (let i = 1; i <= n; i++) {
+    for (let j = 1; j <= m; j++) {
+      const up = dp[i - 1]![j] as number
+      const left = dp[i]![j - 1] as number
+      let best = up
+      let move = 0
+      if (left > best) { best = left; move = 1 }
+      const sim = lineSimilarity(olds[i - 1] as string, adds[j - 1] as string)
+      if (sim >= MIN_PAIR_SIMILARITY) {
+        const diag = (dp[i - 1]![j - 1] as number) + sim
+        if (diag > best) { best = diag; move = 2 }
+      }
+      dp[i]![j] = best
+      from[i]![j] = move
+    }
+  }
+  const pairs: Array<[number, number]> = []
+  let i = n
+  let j = m
+  while (i > 0 && j > 0) {
+    const move = from[i]![j] as number
+    if (move === 2) { pairs.push([i - 1, j - 1]); i--; j-- }
+    else if (move === 0) i--
+    else j--
+  }
+  pairs.reverse()
+  return pairs
+}
+
+/** 从 ops 构建渲染行，仅含真实差异；替换块按相似度配对，配对行做行内字符高亮。 */
 function buildDiffLines(oldLines: readonly string[], newLines: readonly string[]): RenderLine[] {
   const ops = lineDiff(oldLines, newLines)
   const out: RenderLine[] = []
@@ -327,21 +388,27 @@ function buildDiffLines(oldLines: readonly string[], newLines: readonly string[]
     while (i < ops.length && ops[i]?.type === 'add') i++
     const delOps = ops.slice(dStart, addStart)
     const addOps = ops.slice(addStart, i)
-    if (delOps.length === addOps.length && delOps.length > 0) {
-      for (let k = 0; k < delOps.length; k++) {
-        const del = delOps[k]
-        const add = addOps[k]
-        if (del === undefined || add === undefined) continue
-        const oldText = oldLines[del.a] ?? ''
-        const newText = newLines[add.b] ?? ''
-        const hl = lineHighlight(oldText, newText)
-        out.push({ kind: 'del', text: oldText, hl: hl.del })
-        out.push({ kind: 'add', text: newText, hl: hl.add })
-      }
-    } else {
-      for (const op of delOps) out.push({ kind: 'del', text: oldLines[op.a] ?? '', hl: [] })
-      for (const op of addOps) out.push({ kind: 'add', text: newLines[op.b] ?? '', hl: [] })
+    const delTexts = delOps.map(op => oldLines[op.a] ?? '')
+    const addTexts = addOps.map(op => newLines[op.b] ?? '')
+    const pairs = alignBlock(delTexts, addTexts)
+    if (pairs === null) {
+      for (const text of delTexts) out.push({ kind: 'del', text, hl: [] })
+      for (const text of addTexts) out.push({ kind: 'add', text, hl: [] })
+      continue
     }
+    let di = 0
+    let ai = 0
+    for (const [pd, pa] of pairs) {
+      while (di < pd) { out.push({ kind: 'del', text: delTexts[di] as string, hl: [] }); di++ }
+      while (ai < pa) { out.push({ kind: 'add', text: addTexts[ai] as string, hl: [] }); ai++ }
+      const hl = lineHighlight(delTexts[pd] as string, addTexts[pa] as string)
+      out.push({ kind: 'del', text: delTexts[pd] as string, hl: hl.del })
+      out.push({ kind: 'add', text: addTexts[pa] as string, hl: hl.add })
+      di = pd + 1
+      ai = pa + 1
+    }
+    while (di < delTexts.length) { out.push({ kind: 'del', text: delTexts[di] as string, hl: [] }); di++ }
+    while (ai < addTexts.length) { out.push({ kind: 'add', text: addTexts[ai] as string, hl: [] }); ai++ }
   }
   return out
 }
