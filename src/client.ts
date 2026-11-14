@@ -333,16 +333,24 @@ function lineSimilarity(a: string, b: string): number {
   return (p + s) / maxLen
 }
 
-/** 单调对齐替换块两侧的行，返回 [删除行下标, 新增行下标] 序列；超过规模上限返回 null。 */
+/**
+ * 单调对齐替换块两侧的行，返回 [删除行下标, 新增行下标] 序列；超过规模上限返回 null。
+ *
+ * 两侧行数相等时按位置逐一配对，不做相似度筛选：一整段中文改写常常只有少量字词保留，
+ * 相似度远低于阈值，但一侧的唯一一行本来就只能对另一侧的唯一一行，放弃配对只会让行内高亮全部消失。
+ * 行数不等时按相似度做单调对齐，避免无关行被硬凑；若一行都没配上，说明整块被重写，回退成按位置配对，
+ * 否则用户看到的是一整片没有下划线的红绿行，和内置卡片没区别。
+ */
 function alignBlock(olds: readonly string[], adds: readonly string[]): Array<[number, number]> | null {
   const n = olds.length
   const m = adds.length
   if (n === 0 || m === 0) return []
-  if (n + m > MAX_ALIGN_LINES) return null
+  if (n !== m && n + m > MAX_ALIGN_LINES) return null
   let chars = 0
   for (const line of olds) chars += line.length
   for (const line of adds) chars += line.length
   if (chars > MAX_ALIGN_CHARS) return null
+  if (n === m) return olds.map((_, i): [number, number] => [i, i])
 
   const dp: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0))
   const from: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0))
@@ -372,10 +380,14 @@ function alignBlock(olds: readonly string[], adds: readonly string[]): Array<[nu
     else j--
   }
   pairs.reverse()
+  if (pairs.length === 0) {
+    const count = Math.min(n, m)
+    return Array.from({ length: count }, (_, index): [number, number] => [index, index])
+  }
   return pairs
 }
 
-/** 从 ops 构建渲染行，仅含真实差异；替换块按相似度配对，配对行做行内字符高亮。 */
+/** 从 ops 构建渲染行，仅含真实差异；等长替换块按位置配对，不等长按相似度配对，配对行做行内字符高亮。 */
 function buildDiffLines(oldLines: readonly string[], newLines: readonly string[]): RenderLine[] {
   const ops = lineDiff(oldLines, newLines)
   const out: RenderLine[] = []
